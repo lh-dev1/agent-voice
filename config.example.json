@@ -1,0 +1,48 @@
+{
+  "app": {
+    "device_id": "clinic-room-01-pc-03",
+    "app_version": "0.1.0",
+    "log_level": "INFO",
+    "log_retention_days": 7
+  },
+  "audio": {
+    "sample_rate": 16000,
+    "channels": 1,
+    "device_index": null,
+    "frame_ms": 30
+  },
+  "wake": {
+    "engine": "sherpa_onnx",
+    "model_dir": "models/wake/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01",
+    "keywords_file": "models/wake/keywords.txt",
+    "sensitivity": 0.8,
+    "cooldown_ms": 1500
+  },
+  "asr": {
+    "engine": "sensevoice",
+    "model_dir": "models/asr/SenseVoiceSmall",
+    "mode": "warm",
+    "device": "cpu",
+    "num_threads": 4,
+    "timeout_ms": 8000
+  },
+  "recorder": {
+    "min_duration_ms": 800,
+    "max_duration_ms": 6000,
+    "end_silence_ms": 900,
+    "pre_roll_ms": 300,
+    "energy_threshold": 0.008
+  },
+  "transport": {
+    "base_url": "http://127.0.0.1:18080",
+    "command_path": "/api/voice/commands",
+    "timeout_ms": 3000,
+    "retry": 1,
+    "hmac_secret_env": "AGENT_VOICE_HMAC_SECRET"
+  },
+  "privacy": {
+    "save_audio": false,
+    "mask_patient_id_in_log": true,
+    "mask_patient_name_in_log": true
+  }
+}
