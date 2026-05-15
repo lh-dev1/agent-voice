@@ -8,30 +8,21 @@ from typing import Any
 from PySide6.QtCore import QPoint, QThread, QTimer, Signal, Qt
 from PySide6.QtWidgets import (
     QApplication,
-    QComboBox,
-    QDialog,
-    QDoubleSpinBox,
-    QFormLayout,
     QFrame,
-    QHBoxLayout,
     QInputDialog,
     QLabel,
-    QLineEdit,
     QMainWindow,
     QMenu,
     QMessageBox,
-    QPushButton,
     QVBoxLayout,
-    QWidget,
 )
 
 from agent_voice.config import AppConfig
-from agent_voice.config_writer import update_config
 from agent_voice.pipeline import CommandOutcome, CommandPipeline
+from agent_voice.ui.settings_dialog import SettingsDialog
 from agent_voice.ui.styles import floating_widget_style_sheet
 from agent_voice.ui.status_avatar import StatusAvatar
 from agent_voice.voice_status import DEFAULT_STATUS_PATH, read_voice_status
-from agent_voice.voice_loop import list_audio_devices
 
 
 class CommandWorker(QThread):
@@ -92,6 +83,7 @@ class FloatingWidget(QMainWindow):
 
     def contextMenuEvent(self, event: Any) -> None:
         menu = QMenu(self)
+        menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         menu.addAction("输入指令", self._open_text_command)
         menu.addAction("暂停/恢复", self._toggle_mute)
         menu.addAction("设置", self._open_settings)
@@ -121,9 +113,9 @@ class FloatingWidget(QMainWindow):
         self._set_state("muted" if self.muted else "idle", "已暂停" if self.muted else "待机")
 
     def _open_text_command(self) -> None:
-        text, accepted = QInputDialog.getText(self, "输入指令", "文字指令：")
-        if accepted:
-            self._send_text(text)
+        dialog = _build_text_command_dialog(self)
+        if dialog.exec():
+            self._send_text(dialog.textValue())
 
     def _send_text(self, text: str) -> None:
         if self.muted:
@@ -139,12 +131,16 @@ class FloatingWidget(QMainWindow):
 
     def _apply_outcome(self, outcome: CommandOutcome) -> None:
         if outcome.status == "sent":
-            self._set_state("sent", "已发送")
-            self.setToolTip(outcome.feedback or outcome.message)
+            message = outcome.feedback or outcome.message
+            self._set_state("sent", "发送成功")
+            self.setToolTip(message)
+            QMessageBox.information(self, "发送结果", message)
             return
         if outcome.status == "no_match":
+            message = outcome.message
             self._set_state("no_match", "未匹配")
-            self.setToolTip(outcome.message)
+            self.setToolTip(message)
+            QMessageBox.information(self, "发送结果", message)
             return
         self._set_state("error", "失败")
         self.setToolTip(outcome.message)
@@ -171,68 +167,6 @@ class FloatingWidget(QMainWindow):
         self.setToolTip(formatted)
 
 
-class SettingsDialog(QDialog):
-    """Settings dialog for microphone and endpoint values."""
-
-    def __init__(self, config: AppConfig, config_path: str, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.config = config
-        self.config_path = config_path
-        self.device_options = _audio_device_options(list_audio_devices())
-        self.setWindowTitle("Agent Voice 设置")
-        self.setFixedWidth(460)
-        self._build_ui()
-
-    def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        form = QFormLayout()
-        self.device_box = QComboBox()
-        for label, device_index in self.device_options:
-            self.device_box.addItem(label, device_index)
-        current = self.config.audio.device_index
-        for index, (_label, device_index) in enumerate(self.device_options):
-            if device_index == current:
-                self.device_box.setCurrentIndex(index)
-        self.base_url = QLineEdit(self.config.transport.base_url)
-        self.sensitivity = QDoubleSpinBox()
-        self.sensitivity.setRange(0.1, 0.9)
-        self.sensitivity.setSingleStep(0.05)
-        self.sensitivity.setValue(self.config.wake.sensitivity)
-        self.energy = QDoubleSpinBox()
-        self.energy.setRange(0.001, 0.1)
-        self.energy.setDecimals(3)
-        self.energy.setSingleStep(0.001)
-        self.energy.setValue(self.config.recorder.energy_threshold)
-        form.addRow("麦克风", self.device_box)
-        form.addRow("业务地址", self.base_url)
-        form.addRow("唤醒灵敏度", self.sensitivity)
-        form.addRow("静音阈值", self.energy)
-        layout.addLayout(form)
-
-        actions = QHBoxLayout()
-        actions.addStretch(1)
-        cancel = QPushButton("取消")
-        cancel.clicked.connect(self.reject)
-        save = QPushButton("保存")
-        save.clicked.connect(self._save)
-        actions.addWidget(cancel)
-        actions.addWidget(save)
-        layout.addLayout(actions)
-
-    def _save(self) -> None:
-        update_config(
-            self.config_path,
-            {
-                "audio.device_index": self.device_box.currentData(),
-                "transport.base_url": self.base_url.text().strip(),
-                "wake.sensitivity": round(self.sensitivity.value(), 3),
-                "recorder.energy_threshold": round(self.energy.value(), 3),
-            },
-        )
-        QMessageBox.information(self, "Agent Voice", "设置已保存，重启监听后生效。")
-        self.accept()
-
-
 def run_qt_widget(pipeline: CommandPipeline, config: AppConfig, config_path: str) -> int:
     """Run the Qt floating widget."""
 
@@ -242,21 +176,25 @@ def run_qt_widget(pipeline: CommandPipeline, config: AppConfig, config_path: str
     return app.exec()
 
 
-def _audio_device_options(devices: list[dict[str, Any]]) -> list[tuple[str, int | None]]:
-    """Build microphone choices for settings, including the system default."""
+def _build_text_command_dialog(parent: QMainWindow) -> QInputDialog:
+    """Build the manual text command dialog with Chinese action labels."""
 
-    options: list[tuple[str, int | None]] = [("系统默认麦克风", None)]
-    for device in devices:
-        if int(device.get("max_input_channels") or 0) <= 0:
-            continue
-        options.append((f'{device.get("index")}: {device.get("name")}', int(device["index"])))
-    return options
+    dialog = QInputDialog(parent)
+    dialog.setWindowTitle("输入指令")
+    dialog.setLabelText("文字指令：")
+    dialog.setOkButtonText("发送")
+    dialog.setCancelButtonText("取消")
+    return dialog
 
 
 def _compact_status_text(text: str) -> str:
     """Return the first useful status line for the compact header."""
 
-    first_line = text.strip().splitlines()[0] if text.strip() else ""
+    lines = [line for line in text.strip().splitlines() if line]
+    first_line = lines[0] if lines else ""
+    for line in lines:
+        if line.startswith("发送结果："):
+            return line.replace("发送结果：", "").split("/", 1)[0].strip()
     if first_line.startswith("麦克风："):
         return first_line.replace("麦克风：", "").replace("，音量", "")
     if first_line.startswith("最近识别：唤醒词"):
@@ -292,10 +230,24 @@ def _format_voice_status(status: dict[str, Any]) -> str:
         text = status.get("asr_text", "")
         outcome = status.get("outcome_status", "")
         intent = status.get("intent") or "未匹配"
-        return f"最近识别：{text}\n结果：{outcome} / {intent}"
+        message = status.get("outcome_message") or ""
+        readable = _readable_outcome_status(str(outcome))
+        detail = f"\n说明：{message}" if message else ""
+        return f"最近识别：{text}\n发送结果：{readable} / {intent}{detail}"
     if event == "empty_recording":
         return "最近识别：录音为空"
     if event == "recording_complete":
         return "最近识别：录音完成，正在识别"
     message = status.get("message")
     return f"最近识别：{message or event or '暂无'}"
+
+
+def _readable_outcome_status(status: str) -> str:
+    """Return a short Chinese label for command delivery status."""
+
+    labels = {
+        "sent": "已发送",
+        "no_match": "未匹配",
+        "error": "发送失败",
+    }
+    return labels.get(status, status or "未知")

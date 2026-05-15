@@ -3,12 +3,28 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 
-DEFAULT_STATUS_PATH = Path("runtime/last_voice_event.json")
+def _default_status_path() -> Path:
+    """Return a writable per-user path shared by the GUI and voice loop."""
+
+    override = os.environ.get("AGENT_VOICE_STATUS_PATH")
+    if override:
+        return Path(override)
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "AgentVoice" / "last_voice_event.json"
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+        return base / "AgentVoice" / "last_voice_event.json"
+    return Path.home() / ".local" / "state" / "agent-voice" / "last_voice_event.json"
+
+
+DEFAULT_STATUS_PATH = _default_status_path()
 
 
 def write_voice_status(path: str | Path = DEFAULT_STATUS_PATH, **status: Any) -> None:

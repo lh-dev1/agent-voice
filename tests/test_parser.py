@@ -16,6 +16,21 @@ class IntentParserTest(unittest.TestCase):
         self.assertGreaterEqual(result.parser_confidence, 0.95)
         self.assertEqual(result.normalized_text, "打开患者123456")
 
+    def test_fetches_patient_by_spoken_digit_id_after_wake_word(self):
+        result = self.parser.parse("小图小图，调取患者一二三四五六", asr_confidence=0.91)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.intent, "fetch_patient")
+        self.assertEqual(result.params, {"patient_id": "123456"})
+        self.assertEqual(result.normalized_text, "调取患者123456")
+
+    def test_fetches_patient_by_id_with_extra_words(self):
+        result = self.parser.parse("帮我打开病人123456的病历", asr_confidence=0.91)
+
+        self.assertTrue(result.matched)
+        self.assertEqual(result.intent, "fetch_patient")
+        self.assertEqual(result.params, {"patient_id": "123456"})
+
     def test_fetches_patient_by_chinese_name(self):
         result = self.parser.parse("查看患者张三", asr_confidence=0.88)
 

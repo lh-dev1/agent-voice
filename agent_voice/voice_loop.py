@@ -153,11 +153,13 @@ def _microphone_status_payload(frame: np.ndarray, threshold: float) -> dict[str,
         level = 0.0
     else:
         level = float(np.sqrt(np.mean(np.square(frame, dtype=np.float32))))
+    scale = max(threshold * 3, 0.001)
+    level_percent = min(100, int(round((level / scale) * 100)))
     return {
         "event": "mic_level",
         "active": level >= threshold,
         "level": round(level, 4),
-        "level_percent": min(100, int(round(level * 1000))),
+        "level_percent": level_percent,
     }
 
 

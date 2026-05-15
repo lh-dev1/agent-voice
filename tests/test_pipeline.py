@@ -36,7 +36,10 @@ class CommandPipelineTest(unittest.TestCase):
 
         outcome = pipeline.process_text("随便说一句", asr_confidence=0.91)
 
-        self.assertEqual(outcome, CommandOutcome(status="no_match", message="no_rule_matched"))
+        self.assertEqual(outcome.status, "no_match")
+        self.assertIn("未匹配指令", outcome.message)
+        self.assertIn("调取患者123456", outcome.message)
+        self.assertNotIn("no_rule_matched", outcome.message)
         self.assertEqual(client.payloads, [])
 
     def test_process_text_surfaces_send_error(self):

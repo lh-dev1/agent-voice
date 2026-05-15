@@ -28,7 +28,15 @@ if (!(Test-Path (Join-Path $Root "models"))) {
     exit 1
 }
 
-Invoke-AgentPython @("-m", "pip", "install", "--upgrade", "pyinstaller")
+if (Test-Path $VenvPython) {
+    & $VenvPython -m PyInstaller --version *> $null
+} else {
+    & py -3.12 -m PyInstaller --version *> $null
+}
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Missing PyInstaller. Install it first: python -m pip install pyinstaller"
+    exit 1
+}
 
 if (Test-Path $BuildDir) {
     Remove-Item $BuildDir -Recurse -Force
@@ -62,6 +70,8 @@ Invoke-AgentPython @(
 Copy-Item (Join-Path $DistDir $AppName) (Join-Path $ReleaseDir $AppName) -Recurse
 Copy-Item (Join-Path $Root "config.example.json") (Join-Path $ReleaseDir "config.example.json")
 Copy-Item (Join-Path $Root "models") (Join-Path $ReleaseDir "models") -Recurse
+$ReleaseModelsDir = Join-Path $ReleaseDir "models"
+Get-ChildItem -Path $ReleaseModelsDir -Filter ".DS_Store" -Recurse -Force | Remove-Item -Force
 $LauncherDir = Join-Path $ReleaseDir "launchers\windows"
 New-Item -ItemType Directory -Path $LauncherDir | Out-Null
 

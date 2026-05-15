@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 dist/
 build/
+AgentVoice.spec
 *.egg-info/
 .DS_Store
 runtime/
@@ -11,3 +12,4 @@ release/
 models/
 *.pt
 *.onnx
+/tests/

@@ -26,3 +26,7 @@ agent-voice = "agent_voice.app:main"
 
 [tool.setuptools.packages.find]
 include = ["agent_voice*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["build", "dist", "release", "models", ".venv"]

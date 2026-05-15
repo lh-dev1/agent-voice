@@ -16,7 +16,7 @@ class VoiceLoopStatusTest(unittest.TestCase):
         self.assertEqual(payload["event"], "mic_level")
         self.assertTrue(payload["active"])
         self.assertEqual(payload["level"], 0.02)
-        self.assertEqual(payload["level_percent"], 20)
+        self.assertEqual(payload["level_percent"], 83)
 
     def test_builds_quiet_microphone_payload_below_threshold(self):
         frame = np.ones(160, dtype=np.float32) * 0.001
@@ -25,7 +25,7 @@ class VoiceLoopStatusTest(unittest.TestCase):
 
         self.assertEqual(payload["event"], "mic_level")
         self.assertFalse(payload["active"])
-        self.assertEqual(payload["level_percent"], 1)
+        self.assertEqual(payload["level_percent"], 4)
 
     def test_formats_microphone_level_for_widget(self):
         text = _format_voice_status({"event": "mic_level", "active": True, "level_percent": 23})

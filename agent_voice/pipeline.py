@@ -40,7 +40,7 @@ class CommandPipeline:
         parse_result = self.parser.parse(text, asr_confidence=asr_confidence)
         parse_ms = int((time.perf_counter() - started) * 1000)
         if not parse_result.matched:
-            return CommandOutcome(status="no_match", message=parse_result.reason or "no_rule_matched")
+            return CommandOutcome(status="no_match", message=_format_no_match_message(text, parse_result.reason))
 
         request_id = generate_request_id(now=datetime.now(timezone.utc))
         payload = build_command_payload(
@@ -64,3 +64,13 @@ class CommandPipeline:
             feedback=response.feedback,
             request_id=request_id,
         )
+
+
+def _format_no_match_message(text: str, reason: str | None) -> str:
+    """Return a human-readable message for unmatched local commands."""
+
+    if reason == "low_asr_confidence":
+        return "识别置信度太低，请靠近麦克风再说一次。可试：调取患者123456。"
+    cleaned = text.strip() or "空指令"
+    examples = "调取患者123456、查看患者张三、呼叫下一个患者、开始录音"
+    return f"未匹配指令：{cleaned}。可试：{examples}。"

@@ -86,6 +86,16 @@ models/wake/keywords.txt
 挂件显示识别结果，业务 Mock 收到请求
 ```
 
+当前内置规则支持这些指令：
+
+- `调取患者123456`、`小图小图调取患者一二三四五六`
+- `打开患者张三`、`查看患者张三的病历`
+- `帮我打开病人123456的病历`
+- `呼叫下一个患者`、`呼叫下一位患者`
+- `开始录音`、`暂停录音`、`继续录音`、`停止录音`
+
+如果发送结果显示“未匹配指令”，说明这句话还没有本地规则，指令不会发到业务系统。先用上面的句式验证链路，再按真实业务补充规则。
+
 测试 ASR：
 
 - macOS：双击 `launchers/macos/测试麦克风ASR.command`
@@ -165,6 +175,7 @@ release/AgentVoice-macos.dmg
 DMG 内包含：
 
 ```text
+AgentVoice.app
 AgentVoice/AgentVoice
 config.example.json
 models/
@@ -173,6 +184,10 @@ launchers/macos/启动语音监听.command
 launchers/macos/启动业务Mock.command
 launchers/macos/测试麦克风ASR.command
 ```
+
+双击 DMG 只会挂载磁盘镜像，不会自动启动程序。打开挂载后的 `AgentVoice` 磁盘，双击 `AgentVoice.app` 会同时启动挂件和后台语音监听；也可以进入 `launchers/macos/` 双击对应 `.command` 单独启动具体功能。
+
+macOS 打包版的语音监听日志写入 `~/Library/Logs/AgentVoice/voice-loop.log`。挂件状态文件写入用户目录，不依赖 DMG 是否只读。
 
 首次打开 macOS 可能提示安全限制。测试阶段可在系统设置里允许运行；正式分发需要做 Apple Developer 签名和公证。
 
