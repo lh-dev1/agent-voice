@@ -5,14 +5,16 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from PySide6.QtCore import QThread, QTimer, Signal, Qt
+from PySide6.QtCore import QPoint, QThread, QTimer, Signal, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -26,18 +28,10 @@ from PySide6.QtWidgets import (
 from agent_voice.config import AppConfig
 from agent_voice.config_writer import update_config
 from agent_voice.pipeline import CommandOutcome, CommandPipeline
+from agent_voice.ui.styles import floating_widget_style_sheet
+from agent_voice.ui.status_avatar import StatusAvatar
 from agent_voice.voice_status import DEFAULT_STATUS_PATH, read_voice_status
 from agent_voice.voice_loop import list_audio_devices
-
-
-STATE_COLORS = {
-    "idle": "#6b7280",
-    "sending": "#2563eb",
-    "sent": "#16a34a",
-    "no_match": "#f97316",
-    "error": "#dc2626",
-    "muted": "#9ca3af",
-}
 
 
 class CommandWorker(QThread):
@@ -65,99 +59,95 @@ class FloatingWidget(QMainWindow):
         self.worker: CommandWorker | None = None
         self.muted = False
         self.last_status_updated_at = ""
+        self.drag_start: QPoint | None = None
         self.setWindowTitle("Agent Voice")
-        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
-        self.resize(380, 170)
+        self.setWindowFlags(
+            self.windowFlags()
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.Tool
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.resize(116, 106)
         self._build_ui()
         self._set_state("idle", "待机")
         self._start_status_timer()
 
     def _build_ui(self) -> None:
-        root = QWidget(self)
+        root = QFrame(self)
+        root.setObjectName("agentVoicePet")
         layout = QVBoxLayout(root)
-        header = QHBoxLayout()
-        self.status_dot = QLabel()
-        self.status_dot.setFixedSize(14, 14)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(5)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.avatar = StatusAvatar()
+        layout.addWidget(self.avatar, 0, Qt.AlignmentFlag.AlignCenter)
         self.status_label = QLabel("待机")
-        self.status_label.setStyleSheet("font-weight: 700; font-size: 14px;")
-        header.addWidget(self.status_dot)
-        header.addWidget(self.status_label)
-        header.addStretch(1)
-        layout.addLayout(header)
-
-        self.entry = QLineEdit()
-        self.entry.setPlaceholderText("输入指令，例如：调取患者 123456")
-        self.entry.returnPressed.connect(self._send_current_text)
-        layout.addWidget(self.entry)
-
-        actions = QHBoxLayout()
-        self.send_button = QPushButton("发送")
-        self.send_button.clicked.connect(self._send_current_text)
-        self.mute_button = QPushButton("暂停")
-        self.mute_button.clicked.connect(self._toggle_mute)
-        self.settings_button = QPushButton("设置")
-        self.settings_button.clicked.connect(self._open_settings)
-        actions.addWidget(self.send_button)
-        actions.addWidget(self.mute_button)
-        actions.addWidget(self.settings_button)
-        actions.addStretch(1)
-        layout.addLayout(actions)
-
-        self.feedback_label = QLabel("")
-        self.feedback_label.setWordWrap(True)
-        layout.addWidget(self.feedback_label)
-        self.voice_text_label = QLabel("最近识别：暂无")
-        self.voice_text_label.setWordWrap(True)
-        self.voice_text_label.setStyleSheet("color: #374151;")
-        layout.addWidget(self.voice_text_label)
+        self.status_label.setObjectName("statusLabel")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.status_label)
         self.setCentralWidget(root)
+        self.setStyleSheet(floating_widget_style_sheet())
 
     def contextMenuEvent(self, event: Any) -> None:
         menu = QMenu(self)
+        menu.addAction("输入指令", self._open_text_command)
         menu.addAction("暂停/恢复", self._toggle_mute)
         menu.addAction("设置", self._open_settings)
         menu.addSeparator()
         menu.addAction("退出", self.close)
         menu.exec(event.globalPos())
 
+    def mousePressEvent(self, event: Any) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.drag_start = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event: Any) -> None:
+        if self.drag_start is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self.drag_start)
+            event.accept()
+
+    def mouseReleaseEvent(self, _event: Any) -> None:
+        self.drag_start = None
+
     def _set_state(self, state: str, message: str) -> None:
-        color = STATE_COLORS[state]
-        self.status_dot.setStyleSheet(f"background: {color}; border-radius: 7px;")
         self.status_label.setText(message)
+        self.avatar.set_state(state)
 
     def _toggle_mute(self) -> None:
         self.muted = not self.muted
-        self.entry.setEnabled(not self.muted)
-        self.send_button.setEnabled(not self.muted)
-        self.mute_button.setText("恢复" if self.muted else "暂停")
         self._set_state("muted" if self.muted else "idle", "已暂停" if self.muted else "待机")
 
-    def _send_current_text(self) -> None:
+    def _open_text_command(self) -> None:
+        text, accepted = QInputDialog.getText(self, "输入指令", "文字指令：")
+        if accepted:
+            self._send_text(text)
+
+    def _send_text(self, text: str) -> None:
         if self.muted:
             return
-        text = self.entry.text().strip()
+        text = text.strip()
         if not text:
-            self.feedback_label.setText("请输入指令")
+            self._set_state("no_match", "请输入指令")
             return
         self._set_state("sending", "发送中")
-        self.send_button.setEnabled(False)
         self.worker = CommandWorker(self.pipeline, text)
         self.worker.finished.connect(self._apply_outcome)
         self.worker.start()
 
     def _apply_outcome(self, outcome: CommandOutcome) -> None:
-        self.send_button.setEnabled(not self.muted)
         if outcome.status == "sent":
-            self._set_state("sent", "成功")
-            self.feedback_label.setText(outcome.feedback or outcome.message)
-            self.entry.clear()
+            self._set_state("sent", "已发送")
+            self.setToolTip(outcome.feedback or outcome.message)
             return
         if outcome.status == "no_match":
             self._set_state("no_match", "未匹配")
-            self.feedback_label.setText(outcome.message)
+            self.setToolTip(outcome.message)
             return
         self._set_state("error", "失败")
-        self.feedback_label.setText(outcome.message)
+        self.setToolTip(outcome.message)
         QMessageBox.warning(self, "Agent Voice", outcome.message)
 
     def _open_settings(self) -> None:
@@ -176,7 +166,9 @@ class FloatingWidget(QMainWindow):
         if not status or updated_at == self.last_status_updated_at:
             return
         self.last_status_updated_at = updated_at
-        self.voice_text_label.setText(_format_voice_status(status))
+        formatted = _format_voice_status(status)
+        self.status_label.setText(_compact_status_text(formatted))
+        self.setToolTip(formatted)
 
 
 class SettingsDialog(QDialog):
@@ -259,6 +251,21 @@ def _audio_device_options(devices: list[dict[str, Any]]) -> list[tuple[str, int 
             continue
         options.append((f'{device.get("index")}: {device.get("name")}', int(device["index"])))
     return options
+
+
+def _compact_status_text(text: str) -> str:
+    """Return the first useful status line for the compact header."""
+
+    first_line = text.strip().splitlines()[0] if text.strip() else ""
+    if first_line.startswith("麦克风："):
+        return first_line.replace("麦克风：", "").replace("，音量", "")
+    if first_line.startswith("最近识别：唤醒词"):
+        return "已唤醒"
+    if first_line.startswith("最近识别：录音完成"):
+        return "识别中"
+    if first_line.startswith("麦克风ASR："):
+        return "ASR结果"
+    return first_line or "等待语音"
 
 
 def _format_voice_status(status: dict[str, Any]) -> str:
