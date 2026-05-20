@@ -15,7 +15,7 @@
     "engine": "sherpa_onnx",
     "model_dir": "models/wake/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01",
     "keywords_file": "models/wake/keywords.txt",
-    "sensitivity": 0.8,
+    "sensitivity": 0.9,
     "cooldown_ms": 1500
   },
   "asr": {
