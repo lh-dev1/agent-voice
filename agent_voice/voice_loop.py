@@ -13,7 +13,7 @@ import numpy as np
 
 from agent_voice.asr.sensevoice import SenseVoiceAsr
 from agent_voice.audio.recorder import EnergyCommandRecorder, write_wav
-from agent_voice.config import AppConfig
+from agent_voice.config import AppConfig, WAKE_SENSITIVITY_MAX, WAKE_SENSITIVITY_MIN
 from agent_voice.pipeline import CommandPipeline
 from agent_voice.voice_status import DEFAULT_STATUS_PATH, read_voice_status, write_voice_status
 from agent_voice.wake.sherpa_onnx_engine import SherpaOnnxWakeDetector
@@ -32,7 +32,8 @@ class VoiceLoop:
             keywords_file=config.wake.keywords_file,
             cooldown_ms=config.wake.cooldown_ms,
             sample_rate=config.audio.sample_rate,
-            keywords_threshold=max(0.05, 1.0 - config.wake.sensitivity),
+            keywords_score=_wake_keywords_score(config.wake.sensitivity),
+            keywords_threshold=_wake_keywords_threshold(config.wake.sensitivity),
         )
         self.recorder = EnergyCommandRecorder(
             sample_rate=config.audio.sample_rate,
@@ -196,3 +197,21 @@ def _write_temp_wav(samples: np.ndarray, sample_rate: int) -> Path:
     path = Path(handle.name)
     write_wav(path, samples, sample_rate)
     return path
+
+
+def _wake_keywords_threshold(sensitivity: float) -> float:
+    """Map user wake sensitivity to sherpa-onnx trigger threshold."""
+
+    clamped = _clamp_wake_sensitivity(sensitivity)
+    return round(max(0.05, 1.0 - clamped), 3)
+
+
+def _wake_keywords_score(sensitivity: float) -> float:
+    """Map user wake sensitivity to sherpa-onnx keyword boosting score."""
+
+    clamped = _clamp_wake_sensitivity(sensitivity)
+    return round(1.0 + max(0.0, clamped - 0.5) * 2.5, 3)
+
+
+def _clamp_wake_sensitivity(sensitivity: float) -> float:
+    return min(WAKE_SENSITIVITY_MAX, max(WAKE_SENSITIVITY_MIN, float(sensitivity)))

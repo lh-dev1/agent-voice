@@ -3,8 +3,14 @@ from datetime import datetime, timedelta, timezone
 
 import numpy as np
 
+from agent_voice.config import AppConfig
 from agent_voice.ui.qt_widget import _format_voice_status
-from agent_voice.voice_loop import _microphone_status_payload, _should_write_mic_level
+from agent_voice.voice_loop import (
+    _microphone_status_payload,
+    _should_write_mic_level,
+    _wake_keywords_score,
+    _wake_keywords_threshold,
+)
 
 
 class VoiceLoopStatusTest(unittest.TestCase):
@@ -43,6 +49,26 @@ class VoiceLoopStatusTest(unittest.TestCase):
         status = {"event": "mic_asr_result", "updated_at": (now - timedelta(seconds=7)).isoformat()}
 
         self.assertTrue(_should_write_mic_level(status, now=now, hold_seconds=6))
+
+    def test_missing_wake_sensitivity_defaults_to_high_hit_rate_setting(self):
+        config = AppConfig.from_dict(
+            {
+                "app": {"device_id": "clinic-room-01-pc-03"},
+                "transport": {"base_url": "http://127.0.0.1:18080"},
+            }
+        )
+
+        self.assertEqual(config.wake.sensitivity, 0.9)
+
+    def test_high_sensitivity_lowers_threshold_and_boosts_keyword_score(self):
+        self.assertEqual(_wake_keywords_threshold(0.9), 0.1)
+        self.assertEqual(_wake_keywords_score(0.9), 2.0)
+
+    def test_wake_tuning_clamps_extreme_sensitivity_values(self):
+        self.assertEqual(_wake_keywords_threshold(1.2), 0.05)
+        self.assertEqual(_wake_keywords_score(1.2), 2.125)
+        self.assertEqual(_wake_keywords_threshold(-1.0), 0.9)
+        self.assertEqual(_wake_keywords_score(-1.0), 1.0)
 
 
 if __name__ == "__main__":

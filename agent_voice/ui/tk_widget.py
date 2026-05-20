@@ -7,7 +7,7 @@ import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from agent_voice.config import AppConfig
+from agent_voice.config import AppConfig, WAKE_SENSITIVITY_MAX, WAKE_SENSITIVITY_MIN
 from agent_voice.config_writer import update_config
 from agent_voice.pipeline import CommandOutcome, CommandPipeline
 from agent_voice.voice_loop import list_audio_devices
@@ -180,7 +180,12 @@ class SettingsWindow:
 
         ttk.Label(body, text="唤醒灵敏度").grid(row=2, column=0, sticky="w", pady=6)
         self.sensitivity_var = tk.DoubleVar(value=self.config.wake.sensitivity)
-        ttk.Scale(body, variable=self.sensitivity_var, from_=0.1, to=0.9).grid(row=2, column=1, sticky="ew", pady=6)
+        ttk.Scale(body, variable=self.sensitivity_var, from_=WAKE_SENSITIVITY_MIN, to=WAKE_SENSITIVITY_MAX).grid(
+            row=2,
+            column=1,
+            sticky="ew",
+            pady=6,
+        )
 
         ttk.Label(body, text="静音阈值").grid(row=3, column=0, sticky="w", pady=6)
         self.energy_var = tk.StringVar(value=str(self.config.recorder.energy_threshold))

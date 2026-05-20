@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Any
 
 
+WAKE_SENSITIVITY_MIN = 0.1
+WAKE_SENSITIVITY_MAX = 0.95
+DEFAULT_WAKE_SENSITIVITY = 0.9
+
+
 @dataclass(frozen=True)
 class AppSection:
     """Application identity and logging settings."""
@@ -46,7 +51,7 @@ class WakeSection:
     engine: str = "sherpa_onnx"
     model_dir: str = "models/wake/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
     keywords_file: str = "models/wake/keywords.txt"
-    sensitivity: float = 0.55
+    sensitivity: float = DEFAULT_WAKE_SENSITIVITY
     cooldown_ms: int = 1500
 
 
@@ -161,7 +166,12 @@ def _build_wake_section(raw: dict[str, Any]) -> WakeSection:
         engine=str(raw.get("engine") or "sherpa_onnx"),
         model_dir=str(raw.get("model_dir") or "models/wake/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"),
         keywords_file=str(raw.get("keywords_file") or "models/wake/keywords.txt"),
-        sensitivity=float(raw.get("sensitivity") or 0.55),
+        sensitivity=_clamp_float(
+            raw.get("sensitivity"),
+            default=DEFAULT_WAKE_SENSITIVITY,
+            minimum=WAKE_SENSITIVITY_MIN,
+            maximum=WAKE_SENSITIVITY_MAX,
+        ),
         cooldown_ms=int(raw.get("cooldown_ms") or 1500),
     )
 
@@ -185,3 +195,11 @@ def _build_recorder_section(raw: dict[str, Any]) -> RecorderSection:
         pre_roll_ms=int(raw.get("pre_roll_ms") or 300),
         energy_threshold=float(raw.get("energy_threshold") or 0.008),
     )
+
+
+def _clamp_float(value: Any, *, default: float, minimum: float, maximum: float) -> float:
+    if value is None:
+        number = default
+    else:
+        number = float(value)
+    return min(maximum, max(minimum, number))

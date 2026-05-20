@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from agent_voice.config import AppConfig
+from agent_voice.config import AppConfig, WAKE_SENSITIVITY_MAX, WAKE_SENSITIVITY_MIN
 from agent_voice.config_writer import update_config
 from agent_voice.voice_loop import list_audio_devices
 
@@ -46,7 +46,7 @@ class SettingsDialog(QDialog):
                 self.device_box.setCurrentIndex(index)
         self.base_url = QLineEdit(self.config.transport.base_url)
         self.sensitivity = QDoubleSpinBox()
-        self.sensitivity.setRange(0.1, 0.9)
+        self.sensitivity.setRange(WAKE_SENSITIVITY_MIN, WAKE_SENSITIVITY_MAX)
         self.sensitivity.setSingleStep(0.05)
         self.sensitivity.setValue(self.config.wake.sensitivity)
         self.energy = QDoubleSpinBox()
