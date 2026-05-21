@@ -1,8 +1,11 @@
 import unittest
+from pathlib import Path
+import tempfile
 
 import numpy as np
 
 from agent_voice.asr.microphone import collect_fixed_duration
+from agent_voice.app import _prepare_mic_asr_wav_path
 from agent_voice.ui.qt_widget import _format_voice_status
 
 
@@ -28,6 +31,16 @@ class MicrophoneAsrTest(unittest.TestCase):
         text = _format_voice_status({"event": "mic_asr_empty", "message": "未识别到文字"})
 
         self.assertEqual(text, "麦克风ASR：未识别到文字")
+
+    def test_prepares_requested_microphone_asr_output_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_path = Path(tmp) / "captures" / "last.wav"
+
+            wav_path, keep_wav = _prepare_mic_asr_wav_path(str(output_path))
+
+            self.assertEqual(wav_path, output_path)
+            self.assertTrue(keep_wav)
+            self.assertTrue(output_path.parent.exists())
 
 
 if __name__ == "__main__":

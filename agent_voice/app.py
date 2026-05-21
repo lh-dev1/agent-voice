@@ -6,6 +6,8 @@ import argparse
 import json
 import os
 import sys
+import tempfile
+from pathlib import Path
 
 from agent_voice.config import AppConfig
 from agent_voice.mock_server import BusinessMockServer
@@ -25,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mock-server", action="store_true", help="Start a local mock business endpoint.")
     parser.add_argument("--asr-file", help="Transcribe an audio file with the local SenseVoice model.")
     parser.add_argument("--asr-mic-seconds", type=float, help="Record microphone audio for N seconds and transcribe it.")
+    parser.add_argument("--asr-mic-output", help="Optional path to save the recorded microphone WAV for diagnostics.")
     parser.add_argument("--voice-loop", action="store_true", help="Listen for wake word, record speech, transcribe, and send.")
     parser.add_argument("--list-audio-devices", action="store_true", help="Print available audio devices and exit.")
     return parser
@@ -52,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         return _transcribe_file(config, args.asr_file)
 
     if args.asr_mic_seconds:
-        return _transcribe_microphone(config, args.asr_mic_seconds)
+        return _transcribe_microphone(config, args.asr_mic_seconds, args.asr_mic_output)
 
     if args.voice_loop:
         from agent_voice.voice_loop import VoiceLoop
@@ -112,10 +115,7 @@ def _transcribe_file(config: AppConfig, audio_file: str) -> int:
     return 0
 
 
-def _transcribe_microphone(config: AppConfig, seconds: float) -> int:
-    import tempfile
-    from pathlib import Path
-
+def _transcribe_microphone(config: AppConfig, seconds: float, output_path: str | None = None) -> int:
     from agent_voice.asr.microphone import record_microphone_seconds
     from agent_voice.asr.sensevoice import SenseVoiceAsr
     from agent_voice.audio.recorder import write_wav
@@ -132,9 +132,7 @@ def _transcribe_microphone(config: AppConfig, seconds: float) -> int:
         seconds=seconds,
         device_index=config.audio.device_index,
     )
-    handle = tempfile.NamedTemporaryFile(prefix="agent_voice_mic_", suffix=".wav", delete=False)
-    handle.close()
-    wav_path = Path(handle.name)
+    wav_path, keep_wav = _prepare_mic_asr_wav_path(output_path)
     try:
         write_wav(wav_path, samples, config.audio.sample_rate)
         engine = SenseVoiceAsr(model_dir=config.asr.model_dir, device=config.asr.device)
@@ -146,10 +144,25 @@ def _transcribe_microphone(config: AppConfig, seconds: float) -> int:
             print(json.dumps({"event": "mic_asr_empty", "message": message, "detail": str(exc)}, ensure_ascii=False))
             return 3
     finally:
-        wav_path.unlink(missing_ok=True)
+        if not keep_wav:
+            wav_path.unlink(missing_ok=True)
+    if keep_wav:
+        print(json.dumps({"event": "mic_asr_audio_saved", "audio_path": str(wav_path)}, ensure_ascii=False))
     write_voice_status(DEFAULT_STATUS_PATH, event="mic_asr_result", asr_text=result.text, asr_elapsed_ms=result.elapsed_ms)
     print(json.dumps({"event": "mic_asr_result", **result.__dict__}, ensure_ascii=False))
     return 0
+
+
+def _prepare_mic_asr_wav_path(output_path: str | None = None) -> tuple[Path, bool]:
+    """Return the WAV path for microphone ASR and whether it should be kept."""
+
+    if output_path:
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path, True
+    handle = tempfile.NamedTemporaryFile(prefix="agent_voice_mic_", suffix=".wav", delete=False)
+    handle.close()
+    return Path(handle.name), False
 
 
 def _dry_run_text(config: AppConfig, text: str, asr_confidence: float) -> int:
